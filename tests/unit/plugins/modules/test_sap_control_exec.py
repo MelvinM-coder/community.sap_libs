@@ -61,7 +61,7 @@ class TestSapcontrolModule(ModuleTestCase):
             "function": "GetProcessList"
         }
         with self.assertRaises(AnsibleFailJson) as result:
-            mock_client.side_effect = Exception('Test')
+            mock_client.side_effect = Mock(side_effect=Exception('Test'))
             with set_module_args(args):
                 self.module.main()
         error_msg = result.exception.args[0]['msg']
