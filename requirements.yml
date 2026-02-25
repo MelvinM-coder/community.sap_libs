@@ -1,5 +1,0 @@
----
-collections:
-  - name: community.sap_libs
-    type: dir
-    source: /home/coder/community.sap_libs
