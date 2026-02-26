@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 # Copyright: (c) 2026, Sean Freeman ,
-#                      Rainer Leber <rainerleber@gmail.com> <rainer.leber@sva.de>
-#                      Melvin Malagowski <mmalagowski@oxya.com>
+# Rainer Leber <rainerleber@gmail.com> <rainer.leber@sva.de>
+# Melvin Malagowski <mmalagowski@oxya.com>
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -114,125 +114,43 @@ def recursive_dict(suds_object):
     return out
 
 
-def connection(service_name, hostname, port, username, password, function, parameters, sysnr, use_local):
+def connection(service_name, hostname, port, username, password, sysnr=None, use_local=False):
     """
-    Generic SOAP call helper.
-    - Local mode currently follows sapcontrol socket convention (/tmp/.sapstream5NN13).
-    - Supports dict kwargs OR single positional parameter.
+    Return a SOAP client for the given service (sapcontrol or saphostctrl).
     """
     if use_local and sysnr is not None:
-        # Use Unix domain socket for local connection (sapcontrol-style socket)
         unix_socket = "/tmp/.sapstream5{0}13".format(str(sysnr).zfill(2))
-
-        # Check if socket exists
         if not os.path.exists(unix_socket):
             raise Exception("SAP control Unix socket not found: {0}".format(unix_socket))
-
         url = "http://localhost/{0}?wsdl".format(service_name)
-
         try:
             localsocket = LocalSocketHttpAuthenticated(unix_socket)
             client = Client(url, transport=localsocket)
         except Exception as e:
             raise Exception("Failed to connect via Unix socket: {0}".format(str(e)))
     else:
-        # Use HTTP connection (original behavior)
         url = 'http://{0}:{1}/{2}?wsdl'.format(hostname, port, service_name)
         client = Client(url, username=username, password=password)
+    return client
 
+
+def call_sap_control(hostname, port, username, password, sysnr=None, use_local=False, parameters=None, function=None):
+    con = connection("sapcontrol", hostname, port, username, password, sysnr=sysnr, use_local=use_local)
+    call_function(con, function, parameters)
+
+
+def call_sap_hostctrl(hostname, port, username, password, sysnr=None, use_local=False, parameters=None, function=None):
+    con = connection("SAPHostControl", hostname, port, username, password, sysnr=sysnr, use_local=use_local)
+    call_function(con, function, parameters)
+
+
+def call_function(client, function, parameters=None):
     _function = getattr(client.service, function)
     if parameters is not None:
         if isinstance(parameters, dict):
             result = _function(**parameters)
         else:
-            # support positional parameter (e.g. sap_control_exec ParameterValue)
             result = _function(parameters)
     else:
         result = _function()
-
     return result
-
-
-def connection_sap_control(hostname, port, username, password, function, parameters,
-                           sysnr=None, use_local=False, convert=True):
-    """
-    SAPControl wrapper.
-    - Supports positional parameter (string) and kwargs (dict)
-    - Applies default timeouts for StartSystem/StopSystem/RestartSystem
-    - convert=True  -> returns recursive_dict(result)
-      convert=False -> returns raw suds object (useful for existing modules)
-    """
-    # Keep positional parameter untouched (ex: ParameterValue)
-    if isinstance(parameters, dict):
-        auto_params = parameters.copy()
-    else:
-        auto_params = parameters
-
-    # Inject default timeouts only for dict/None call styles
-    if function == "StartSystem":
-        if auto_params is None:
-            auto_params = {"waittimeout": 0}
-        elif isinstance(auto_params, dict) and "waittimeout" not in auto_params:
-            auto_params["waittimeout"] = 0
-
-    elif function in ("StopSystem", "RestartSystem"):
-        if auto_params is None:
-            auto_params = {"waittimeout": 0, "softtimeout": 0}
-        elif isinstance(auto_params, dict):
-            if "waittimeout" not in auto_params:
-                auto_params["waittimeout"] = 0
-            if "softtimeout" not in auto_params:
-                auto_params["softtimeout"] = 0
-
-    try:
-        result = connection("sapcontrol", hostname, port, username, password, function, auto_params, sysnr, use_local)
-        if convert:
-            return recursive_dict(result)
-        return result
-    except Exception as e:
-        raise Exception("Error calling SAP control function: {0}".format(str(e)))
-
-
-def connection_sap_hostctrl(hostname, port, username, password, function, parameters,
-                            sysnr=None, use_local=False, convert=True):
-    """
-    SAPHostControl wrapper.
-    - Uses hostctrl local socket path (/tmp/.sapstream1128)
-    - Keeps exact HostControl URL form (.../SAPHostControl/?wsdl)
-    - convert=True  -> returns recursive_dict(result)
-      convert=False -> returns raw suds object (useful for existing modules)
-    """
-    try:
-        if use_local:
-            # Use Unix domain socket for local hostctrl connection
-            unix_socket = "/tmp/.sapstream1128"
-
-            if not os.path.exists(unix_socket):
-                raise Exception("SAP control Unix socket not found: {0}".format(unix_socket))
-
-            url = "http://localhost/SAPHostControl/?wsdl"
-
-            try:
-                localsocket = LocalSocketHttpAuthenticated(unix_socket)
-                client = Client(url, transport=localsocket)
-            except Exception as e:
-                raise Exception("Failed to connect via Unix socket: {0}".format(str(e)))
-        else:
-            url = 'http://{0}:{1}/SAPHostControl/?wsdl'.format(hostname, port)
-            client = Client(url, username=username, password=password)
-
-        _function = getattr(client.service, function)
-        if parameters is not None:
-            if isinstance(parameters, dict):
-                result = _function(**parameters)
-            else:
-                result = _function(parameters)
-        else:
-            result = _function()
-
-        if convert:
-            return recursive_dict(result)
-        return result
-
-    except Exception as e:
-        raise Exception("Error calling SAP host control function: {0}".format(str(e)))

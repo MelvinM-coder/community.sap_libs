@@ -260,7 +260,7 @@ from ..module_utils.sapcontrol_soap import (
     HAS_SUDS_LIBRARY,
     SUDS_LIBRARY_IMPORT_ERROR,
     recursive_dict,
-    connection_sap_hostctrl as connection,
+    call_sap_hostctrl as connection,
 )
 
 
@@ -319,29 +319,29 @@ def main():
         try:
             if use_local:
                 # Try local connection first
-                conn = connection(
+                result_conn = connection(
                     hostname, None, username, password, function, parameters,
-                    use_local=True, convert=False
+                    convert=False
                 )
             else:
                 # Try HTTP ports
                 try:
-                    conn = connection(
+                    result_conn = connection(
                         hostname, "1129", username, password, function, parameters,
-                        use_local=False, convert=False
+                        convert=False
                     )
                 except Exception:
-                    conn = connection(
+                    result_conn = connection(
                         hostname, "1128", username, password, function, parameters,
-                        use_local=False, convert=False
+                        convert=False
                     )
         except Exception as err:
             result['error'] = str(err)
     else:
         try:
-            conn = connection(
+            result_conn = connection(
                 hostname, port, username, password, function, parameters,
-                use_local=False, convert=False
+                convert=False
             )
         except Exception as err:
             result['error'] = str(err)
@@ -351,10 +351,10 @@ def main():
         result['msg'] = 'Something went wrong connecting to the {0}.'.format(connection_type)
         module.fail_json(**result)
 
-    if conn is not None:
-        returned_data = recursive_dict(conn)
+    if result_conn is not None:
+        returned_data = recursive_dict(result_conn)
     else:
-        returned_data = conn
+        returned_data = result_conn
 
     result['changed'] = True
     result['msg'] = "Succesful execution of: " + function
